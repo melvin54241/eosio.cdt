@@ -36,3 +36,16 @@
 
 # Build
 build/*
+cmake-build-debug/
+examples/multi_index_example/build
+examples/hello/build
+
+# Python
+__pycache__/
+.mypy_cache/
+
+# Editor Files
+.vscode/
+*.vim
+.idea/
+.ccls-cache/

@@ -1,15 +1,15 @@
-#include <eosiolib/action.h>
-#include <eosiolib/chain.h>
-#include <eosiolib/crypto.h>
-#include <eosiolib/db.h>
-#include <eosiolib/permission.h>
-#include <eosiolib/print.h>
-#include <eosiolib/privileged.h>
-#include <eosiolib/system.h>
-#include <eosiolib/transaction.h>
-#include <eosiolib/types.h>
-#include "intrinsics.hpp"
-#include "crt.hpp"
+#include <eosio/action.h>
+#include <eosio/chain.h>
+#include <eosio/crypto.h>
+#include <eosio/db.h>
+#include <eosio/permission.h>
+#include <eosio/print.h>
+#include <eosio/privileged.h>
+#include <eosio/system.h>
+#include <eosio/transaction.h>
+#include <eosio/types.h>
+#include "native/eosio/intrinsics.hpp"
+#include "native/eosio/crt.hpp"
 #include <softfloat.hpp>
 #include <float.h>
 
@@ -25,17 +25,29 @@ extern "C" {
    int64_t set_proposed_producers( char *producer_data, uint32_t producer_data_size ) {
       return intrinsics::get().call<intrinsics::set_proposed_producers>(producer_data, producer_data_size);
    }
+   int64_t set_proposed_producers_ex( uint64_t producer_data_format, char *producer_data, uint32_t producer_data_size ) {
+      return intrinsics::get().call<intrinsics::set_proposed_producers_ex>(producer_data_format, producer_data, producer_data_size);
+   }
    uint32_t get_blockchain_parameters_packed( char* data, uint32_t datalen ) {
       return intrinsics::get().call<intrinsics::get_blockchain_parameters_packed>(data, datalen);
    }
    void set_blockchain_parameters_packed( char* data, uint32_t datalen ) {
       return intrinsics::get().call<intrinsics::set_blockchain_parameters_packed>(data, datalen);
    }
+   void set_kv_parameters_packed( const char* data, uint32_t datalen ) {
+      return intrinsics::get().call<intrinsics::set_kv_parameters_packed>(data, datalen);
+   }
    bool is_privileged( capi_name account ) {
       return intrinsics::get().call<intrinsics::is_privileged>(account);
    }
    void set_privileged( capi_name account, bool is_priv ) {
       return intrinsics::get().call<intrinsics::set_privileged>(account, is_priv);
+   }
+   bool is_feature_activated( const capi_checksum256* feature_digest ) {
+      return intrinsics::get().call<intrinsics::is_feature_activated>(feature_digest);
+   }
+   void preactivate_feature( const capi_checksum256* feature_digest ) {
+      return intrinsics::get().call<intrinsics::preactivate_feature>(feature_digest);
    }
    uint32_t get_active_producers( capi_name* producers, uint32_t datalen ) {
       return intrinsics::get().call<intrinsics::get_active_producers>(producers, datalen);
@@ -283,6 +295,9 @@ extern "C" {
    capi_name current_receiver() {
       return intrinsics::get().call<intrinsics::current_receiver>();
    }
+   void set_action_return_value( void* rv, size_t len ) {
+      intrinsics::get().call<intrinsics::set_action_return_value>(rv, len);
+   }
    void require_recipient( capi_name name ) {
       return intrinsics::get().call<intrinsics::require_recipient>(name);
    }
@@ -322,14 +337,17 @@ extern "C" {
    void send_context_free_inline(char *serialized_action, size_t size) {
       return intrinsics::get().call<intrinsics::send_context_free_inline>(serialized_action, size);
    }
-   void send_deferred(const uint128_t& sender_id, capi_name payer, const char *serialized_transaction, size_t size, uint32_t replace_existing) {
+   void send_deferred(const uint128_t* sender_id, capi_name payer, const char *serialized_transaction, size_t size, uint32_t replace_existing) {
       return intrinsics::get().call<intrinsics::send_deferred>(sender_id, payer, serialized_transaction, size, replace_existing);
    }
-   int cancel_deferred(const uint128_t& sender_id) {
+   int cancel_deferred(const uint128_t* sender_id) {
       return intrinsics::get().call<intrinsics::cancel_deferred>(sender_id);
    }
    int get_context_free_data( uint32_t index, char* buff, size_t size ) {
       return intrinsics::get().call<intrinsics::get_context_free_data>(index, buff, size);
+   }
+   capi_name get_sender() {
+      return intrinsics::get().call<intrinsics::get_sender>();
    }
 
    // softfloat
@@ -383,7 +401,6 @@ extern "C" {
    float _eosio_f32_copysign( float af, float bf ) {
       float32_t a = to_softfloat32(af);
       float32_t b = to_softfloat32(bf);
-      uint32_t sign_of_a = a.v >> 31;
       uint32_t sign_of_b = b.v >> 31;
       a.v &= ~(1 << 31);             // clear the sign bit
       a.v = a.v | (sign_of_b << 31); // add the sign of b
@@ -546,7 +563,6 @@ extern "C" {
    double _eosio_f64_copysign( double af, double bf ) {
       float64_t a = to_softfloat64(af);
       float64_t b = to_softfloat64(bf);
-      uint64_t sign_of_a = a.v >> 63;
       uint64_t sign_of_b = b.v >> 63;
       a.v &= ~(uint64_t(1) << 63);             // clear the sign bit
       a.v = a.v | (sign_of_b << 63); // add the sign of b
@@ -599,7 +615,6 @@ extern "C" {
       float64_t ret;
       int e = a.v >> 52 & 0x7FF;
       float64_t y;
-      double de = 1/DBL_EPSILON;
       if ( a.v == 0x8000000000000000) {
          return af;
       }
@@ -788,7 +803,7 @@ extern "C" {
    void printui(uint64_t value) {
       return intrinsics::get().call<intrinsics::printui>(value);
    }
-   
+
    void printi128(const int128_t* value) {
       return intrinsics::get().call<intrinsics::printi128>(value);
    }
@@ -796,7 +811,7 @@ extern "C" {
     void printui128(const uint128_t* value) {
       return intrinsics::get().call<intrinsics::printui128>(value);
    }
-  
+
    void printsf(float value) {
       return intrinsics::get().call<intrinsics::printsf>(value);
    }
@@ -808,11 +823,11 @@ extern "C" {
    void printqf(const long double* value) {
       return intrinsics::get().call<intrinsics::printqf>(value);
    }
-   
+
    void printn(uint64_t nm) {
       return intrinsics::get().call<intrinsics::printn>(nm);
    }
-   
+
    void printhex(const void* data, uint32_t len) {
       return intrinsics::get().call<intrinsics::printhex>(data, len);
    }
@@ -844,7 +859,7 @@ extern "C" {
          dest[i] = tmp_buf[i];
       return (void*)dest;
    }
-   
+
    void eosio_assert(uint32_t test, const char* msg) {
       if (test == 0) {
          _prints(msg, eosio::cdt::output_stream_kind::std_err);
@@ -870,22 +885,28 @@ extern "C" {
          longjmp(*___env_ptr, 1);
       }
    }
-   
+
 #pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Winvalid-noreturn" 
+#pragma clang diagnostic ignored "-Winvalid-noreturn"
    void abort() {
       eosio_assert(false, "abort");
    }
 #pragma clang diagnostic pop
-   
-   size_t __builtin_wasm_current_memory() {
-      return (size_t)___heap_ptr;
+
+   int64_t add_security_group_participants(const char* data, uint32_t datalen) {
+      return intrinsics::get().call<intrinsics::add_security_group_participants>(data, datalen);
    }
 
-   size_t __builtin_wasm_grow_memory(size_t size) {
-      if ((___heap_ptr + (size*64*1024)) > (___heap_ptr + 100*1024*1024))
-         eosio_assert(false, "__builtin_wasm_grow_memory");
-      ___heap_ptr += (size*64*1024);
-      return (size_t)___heap_ptr;
+   int64_t remove_security_group_participants(const char* data, uint32_t datalen){
+      return intrinsics::get().call<intrinsics::remove_security_group_participants>(data, datalen);
    }
+
+   bool in_active_security_group(const char* data, uint32_t datalen){
+      return intrinsics::get().call<intrinsics::in_active_security_group>(data, datalen);
+   }
+
+   uint32_t get_active_security_group(char* data, uint32_t datalen){
+      return intrinsics::get().call<intrinsics::get_active_security_group>(data, datalen);
+   }
+
 }

@@ -1,9 +1,11 @@
 #pragma once
 #include <eosio/utils.hpp>
+#include <eosio/abi.hpp>
 #include <eosio/whereami/whereami.hpp>
 #include <vector>
 #include <string>
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 
 #ifdef ONLY_LD
 #define LD_CAT EosioLdToolCategory
@@ -18,6 +20,42 @@ static llvm::cl::OptionCategory EosioLdToolCategory("ld options");
 #endif
 
 /// begin ld options
+static cl::opt<std::string> abi_version_opt(
+    "abi-version",
+    cl::desc("Which ABI version to generate"),
+    cl::cat(LD_CAT));
+static cl::opt<std::string> only_export_opt(
+    "only-export",
+    cl::desc("Export only this symbol"),
+    cl::cat(LD_CAT),
+    cl::Hidden,
+    cl::ZeroOrMore);
+static cl::opt<bool> no_abigen_opt(
+    "no-abigen",
+    cl::desc("Disable ABI file generation"),
+    cl::cat(LD_CAT));
+static cl::opt<bool> no_missing_ricardian_clause_opt(
+    "no-missing-ricardian-clause",
+    cl::desc("Disable warnings for missing Ricardian clauses"),
+    cl::init(false),
+    cl::cat(LD_CAT));
+static cl::opt<bool> fquery_opt(
+    "fquery",
+    cl::desc("Produce binaries for wasmql"),
+    cl::cat(LD_CAT));
+static cl::opt<bool> fquery_server_opt(
+    "fquery-server",
+    cl::desc("Produce binaries for wasmql"),
+    cl::cat(LD_CAT));
+static cl::opt<bool> fquery_client_opt(
+    "fquery-client",
+    cl::desc("Produce binaries for wasmql"),
+    cl::cat(LD_CAT));
+static cl::opt<bool> use_old_malloc_opt(
+    "use-freeing-malloc",
+    cl::desc("Set the malloc implementation to the old freeing malloc"),
+    cl::Hidden,
+    cl::cat(LD_CAT));
 static cl::opt<std::string> eosio_imports_opt(
     "eosio-imports",
     cl::desc("Set the file for eosio.imports"),
@@ -26,6 +64,11 @@ static cl::opt<std::string> eosio_imports_opt(
 static cl::opt<std::string> pp_path_opt(
     "eosio-pp-dir",
     cl::desc("Set the directory for eosio.pp"),
+    cl::Hidden,
+    cl::cat(LD_CAT));
+static cl::opt<bool> use_rt_opt(
+    "use-rt",
+    cl::desc("Use software compiler-rt"),
     cl::Hidden,
     cl::cat(LD_CAT));
 static cl::opt<bool> fno_lto_opt(
@@ -39,6 +82,11 @@ static cl::opt<bool> fno_cfl_aa_opt(
 static cl::opt<bool> fno_stack_first_opt(
       "fno-stack-first",
       cl::desc("Don't set the stack first in memory"),
+      cl::cat(LD_CAT));
+static cl::opt<int> stack_size_opt(
+      "stack-size",
+      cl::desc("Specifies the maximum stack size for the contract. Defaults to ${EOSIO_STACK_SIZE} bytes."),
+      cl::init(${EOSIO_STACK_SIZE}),
       cl::cat(LD_CAT));
 static cl::opt<bool> fno_post_pass_opt(
       "fno-post-pass",
@@ -65,8 +113,8 @@ static cl::opt<std::string> o_opt(
     cl::desc("Write output to <file>"),
     cl::cat(LD_CAT));
 static cl::list<std::string> input_filename_opt(
-      cl::Positional, 
-      cl::desc("<input file> ..."), 
+      cl::Positional,
+      cl::desc("<input file> ..."),
       cl::cat(LD_CAT),
       cl::OneOrMore);
 static cl::opt<bool> fasm_opt(
@@ -83,10 +131,29 @@ static cl::opt<bool> fuse_main_opt(
     "fuse-main",
     cl::desc("Use main as entry"),
     cl::cat(LD_CAT));
+static cl::opt<bool> allow_sse_opt(
+    "allow-sse",
+    cl::desc("Should not be used, except for build libc"),
+    cl::Hidden,
+    cl::cat(LD_CAT));
+static cl::opt<bool> allow_names_opt (
+    "allow-names",
+    cl::desc("Allows name section to be created"),
+    cl::cat(LD_CAT));
+static cl::opt<std::string> mllvm_opt(
+    "mllvm",
+    cl::desc("Pass arguments to llvm"),
+    cl::ZeroOrMore,
+    cl::cat(LD_CAT));
 /// End of ld options
 
 #ifndef ONLY_LD
 /// begin c/c++ options/
+static cl::opt<bool> llvm_ir_opt(
+    "emit-ir",
+    cl::desc("Emit llvm ir"),
+    cl::Hidden,
+    cl::cat(EosioCompilerToolCategory));
 static cl::opt<std::string> MF_opt(
     "MF",
     cl::desc("Write depfile output"),
@@ -119,21 +186,22 @@ static cl::opt<std::string> abigen_output_opt(
     cl::cat(EosioCompilerToolCategory));
 // ignore for now
 static cl::opt<bool> g_opt(
-      "g",
-      cl::desc("debug build <ignored>"),
-      cl::Hidden,
-      cl::cat(EosioCompilerToolCategory));
+    "g",
+    cl::desc("debug build <ignored>"),
+    cl::Hidden,
+    cl::ZeroOrMore,
+    cl::cat(EosioCompilerToolCategory));
 static cl::opt<std::string> x_opt(
-      "x",
-      cl::desc("<ignored>"),
-      cl::Hidden,
-      cl::Prefix,
-      cl::cat(EosioCompilerToolCategory));
+    "x",
+    cl::desc("<ignored>"),
+    cl::Hidden,
+    cl::Prefix,
+    cl::cat(EosioCompilerToolCategory));
 static cl::opt<bool> pch_opt(
-      "fpch-preprocess",
-      cl::desc("<ignored>"),
-      cl::Hidden,
-      cl::cat(EosioCompilerToolCategory));
+    "fpch-preprocess",
+    cl::desc("<ignored>"),
+    cl::Hidden,
+    cl::cat(EosioCompilerToolCategory));
 static cl::opt<bool> CC_opt(
     "CC",
     cl::desc("Include comments from within macros in preprocessed output"),
@@ -279,7 +347,10 @@ static cl::opt<std::string> contract_name(
     "contract",
     cl::desc("Contract name"),
     cl::cat(EosioCompilerToolCategory));
-
+static cl::opt<bool> warn_action_read_only_opt(
+    "warn-action-read-only",
+    cl::desc("Issue a warning if a read-only action uses a write API and continue compilation"),
+    cl::cat(EosioCompilerToolCategory));
 /// end c/c++ options
 
 /// begin c++ options
@@ -302,10 +373,11 @@ static cl::opt<bool> fcoroutine_ts_opt(
 
 struct Options {
    std::string output_fn;
-   std::string abigen_inputs;
    std::vector<std::string> inputs;
    bool link;
    bool abigen;
+   bool suppress_ricardian_warning;
+   bool pp_only;
    std::string eosio_pp_dir;
    std::string abigen_output;
    std::string abigen_contract;
@@ -313,44 +385,56 @@ struct Options {
    std::vector<std::string> ld_options;
    std::vector<std::string> abigen_options;
    std::vector<std::string> abigen_resources;
+   bool debug;
    bool native;
+   std::pair<int, int> abi_version;
+   bool has_o_opt;
+   bool has_contract_opt;
+   bool warn_action_read_only;
 };
 
 static void GetCompDefaults(std::vector<std::string>& copts) {
    const char* eosio_apply_suff = "${CMAKE_SHARED_LIBRARY_SUFFIX}";
-   std::string apply_lib;
-   
+   // add the define for whether this is compiling with CDT and version macros
+   copts.emplace_back("-D__eosio_cdt__");
+   copts.emplace_back(std::string("-D__eosio_cdt_major__=")+"${VERSION_MAJOR}");
+   copts.emplace_back(std::string("-D__eosio_cdt_minor__=")+"${VERSION_MINOR}");
+   copts.emplace_back(std::string("-D__eosio_cdt_patchlevel__=")+"${VERSION_PATCH}");
    if (!fnative_opt) {
       copts.emplace_back("--target=wasm32");
       copts.emplace_back("-ffreestanding");
+      copts.emplace_back("-nostdlib");
+      copts.emplace_back("-fno-builtin");
    } else {
-      copts.emplace_back("-msoft-float");
-      copts.emplace_back("-mno-implicit-float");
+      copts.emplace_back("-Wunused-command-line-argument");
 #ifdef __APPLE__
       copts.emplace_back("--target=x86_64-unknown-darwin-macho");
       copts.emplace_back("-mmacosx-version-min=10.13");
       copts.emplace_back("-fno-stack-protector");
-      copts.emplace_back("-m64");
 #else
       copts.emplace_back("--target=x86_64-unknown-linux-gnu");
-      copts.emplace_back("-m64");
 #endif
+      copts.emplace_back("-m64");
       if (!fasm_opt) {
+         copts.emplace_back("-fno-builtin");
+         copts.emplace_back("-mstackrealign");
+         copts.emplace_back("-D__eosio_cdt_native__");
          copts.emplace_back("-DEOSIO_NATIVE");
-         copts.emplace_back("-DLP64");
+         copts.emplace_back("-DLLP64");
       }
    }
-   //copts.emplace_back("-nostdlib");
 
    if (!fasm_opt) {
       copts.emplace_back("-fno-threadsafe-statics");
 #ifdef CPP_COMP
-      copts.emplace_back("-fno-rtti");
       copts.emplace_back("-fno-exceptions");
+      copts.emplace_back("-fno-rtti");
       copts.emplace_back("-fmodules-ts");
+      copts.emplace_back("-D_GNU_SOURCE=1");
 #endif
       copts.emplace_back("-DBOOST_DISABLE_ASSERTS");
       copts.emplace_back("-DBOOST_EXCEPTION_DISABLE");
+      copts.emplace_back("-U__APPLE__");
       if (!fnative_opt) {
          copts.emplace_back("-Xclang");
          copts.emplace_back("-load");
@@ -379,42 +463,110 @@ static void GetCompDefaults(std::vector<std::string>& copts) {
 #ifdef ONLY_LD
 static void GetLdDefaults(std::vector<std::string>& ldopts) {
    if (!fnative_opt) {
-      if (fuse_main_opt)
-         ldopts.emplace_back("-e main");
+      if (!allow_names_opt) {
+         ldopts.emplace_back("--gc-sections");
+         ldopts.emplace_back("--strip-all");
+      }
+      ldopts.emplace_back("--no-merge-data-segments");
+      if (fquery_opt || fquery_server_opt || fquery_client_opt) {
+         ldopts.emplace_back("--export-table");
+         ldopts.emplace_back("-other-model");
+         ldopts.insert(ldopts.end(), { "--only-export", "*:table" });
+         ldopts.insert(ldopts.end(), { "--only-export", "*:memory" });
+         if (fuse_main_opt) {
+            ldopts.insert(ldopts.end(), { "-e", "main" });
+            ldopts.insert(ldopts.end(), { "--only-export", "main:function" } );
+         }
+         else {
+            ldopts.insert(ldopts.end(), { "-e", "initialize" } );
+            ldopts.insert(ldopts.end(), { "--only-export", "initialize:function" } );
+         }
+         if (fquery_server_opt)
+            ldopts.insert(ldopts.end(), { "-export", "run_query" });
+         else {
+            ldopts.insert(ldopts.end(), { "-export", "create_query_request" });
+            ldopts.insert(ldopts.end(), { "-export", "decode_query_response" });
+            ldopts.insert(ldopts.end(), { "-export", "describe_query_request" });
+            ldopts.insert(ldopts.end(), { "-export", "describe_query_response" });
+         }
+         if (fquery_server_opt)
+            ldopts.insert(ldopts.end(), { "--only-export", "run_query:function" });
+         else {
+            ldopts.insert(ldopts.end(), { "--only-export", "create_query_request:function" });
+            ldopts.insert(ldopts.end(), { "--only-export", "decode_query_response:function" });
+            ldopts.insert(ldopts.end(), { "--only-export", "describe_query_request:function" });
+            ldopts.insert(ldopts.end(), { "--only-export", "describe_query_response:function" });
+         }
+      } else {
+         if (fuse_main_opt)
+            ldopts.insert(ldopts.end(), { "-e", "main" });
+         else
+            ldopts.insert(ldopts.end(), { "-e", "apply" });
+         ldopts.insert(ldopts.end(), { "--only-export", "apply:function" });
+      }
+      ldopts.emplace_back("-lc++");
+      ldopts.emplace_back("-lc");
+      ldopts.emplace_back("-leosio");
+      if (use_old_malloc_opt)
+         ldopts.emplace_back("-leosio_malloc");
       else
-         ldopts.emplace_back("-e apply");
-      ldopts.emplace_back("--gc-sections");
-      ldopts.emplace_back("--strip-all");
-      ldopts.emplace_back("-zstack-size="+std::string("${EOSIO_STACK_SIZE}"));
-      ldopts.emplace_back("--merge-data-segments");
+         ldopts.emplace_back("-leosio_dsm");
+
+      if (use_rt_opt || fquery_opt || fquery_server_opt || fquery_client_opt) {
+         ldopts.emplace_back("-lrt");
+         ldopts.emplace_back("-lsf");
+      }
+      if (fquery_opt || fquery_server_opt || fquery_client_opt)
+         ldopts.emplace_back("-leosio_cmem");
+      if (!only_export_opt.empty()) {
+         ldopts.emplace_back("--only-export");
+         ldopts.emplace_back(only_export_opt);
+      }
+
+      if (!mllvm_opt.empty()) {
+         ldopts.emplace_back("-mllvm");
+         ldopts.emplace_back(mllvm_opt);
+      }
+
    } else {
 #ifdef __APPLE__
-      ldopts.emplace_back("-arch x86_64 -macosx_version_min 10.13");
+      ldopts.insert(ldopts.end(), {"-arch", "x86_64", "-macosx_version_min", "10.13", "-framework", "Foundation", "-framework", "System"});
 #endif
       ldopts.emplace_back("-static");
+      ldopts.insert(ldopts.end(), {"-lnative_c++", "-lnative_c", "-lnative_eosio", "-lnative", "-lnative_rt"});
    }
 }
 #endif
 
 static Options CreateOptions(bool add_defaults=true) {
    std::string output_fn;
-   std::stringstream abigen_inputs;
    std::vector<std::string> inputs;
    std::vector<std::string> agresources;
    std::vector<std::string> copts;
    std::vector<std::string> ldopts;
    std::vector<std::string> agopts;
    bool link = true;
+   bool debug = false;
    std::string pp_dir;
    std::string abigen_output;
    std::string abigen_contract;
+   bool has_o_opt;
+   bool has_contract_opt;
+   bool warn_action_read_only;
 
 #ifdef ONLY_LD
    bool abigen = false;
+   bool pp_only = false;
 #else
    bool abigen = abigen_opt;
+   bool pp_only = E_opt;
    abigen_output = abigen_output_opt;
+   debug = g_opt;
 #endif
+
+   if (no_abigen_opt) {
+      ldopts.emplace_back("-no-abigen");
+   }
 
    if (add_defaults) {
       GetCompDefaults(copts);
@@ -423,12 +575,25 @@ static Options CreateOptions(bool add_defaults=true) {
       GetLdDefaults(ldopts);
 #endif
    }
-   
+
+#ifndef ONLY_LD
+   if (fquery_opt)
+      ldopts.emplace_back("-fquery");
+   if (fquery_server_opt)
+      ldopts.emplace_back("-fquery-server");
+   if (fquery_client_opt)
+      ldopts.emplace_back("-fquery-client");
+   if (allow_names_opt) {
+      ldopts.emplace_back("-fno-post-pass");
+      ldopts.emplace_back("--allow-names");
+   }
+#endif
+
    if (!pp_path_opt.empty())
       pp_dir = pp_path_opt;
    else
       pp_dir = eosio::cdt::whereami::where();
-   
+
    if (!fno_cfl_aa_opt) {
       copts.emplace_back("-mllvm");
       copts.emplace_back("-use-cfl-aa-in-codegen=both");
@@ -444,47 +609,17 @@ static Options CreateOptions(bool add_defaults=true) {
    for ( auto input_filename : input_filename_opt ) {
 #ifdef ONLY_LD
       ldopts.push_back(input_filename);
-#else
-      copts.push_back(input_filename);
-      inputs.push_back(input_filename);
-      abigen_inputs << input_filename << " ";
 #endif
+      inputs.push_back(input_filename);
    }
-   
+
 #ifdef ONLY_LD
    ldopts.emplace_back("-L"+eosio::cdt::whereami::where()+"/../lib");
 #ifndef __APPLE__
    ldopts.emplace_back("-L"+eosio::cdt::whereami::where()+"/../lib64");
 #endif
-#endif   
+#endif
 #ifndef ONLY_LD
-   if (!sysroot_opt.empty()) {
-      copts.emplace_back("--sysroot="+sysroot_opt);
-      copts.emplace_back("-I"+sysroot_opt+"/include/libcxx");
-      copts.emplace_back("-I"+sysroot_opt+"/include/libc");
-      agopts.emplace_back("--sysroot="+sysroot_opt);
-      agopts.emplace_back("-I"+sysroot_opt+"/include/libcxx");
-      agopts.emplace_back("-I"+sysroot_opt+"/include/libc");
-      ldopts.emplace_back("-L"+sysroot_opt+"/lib");
-#ifndef __APPLE__
-      ldopts.emplace_back("-L"+sysroot_opt+"/lib64");
-#endif
-   }
-   else {
-      copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/libcxx");
-      copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/libc");
-      copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include");
-      copts.emplace_back("--sysroot="+eosio::cdt::whereami::where()+"/../");
-      agopts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/libcxx");
-      agopts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/libc");
-      agopts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include");
-      agopts.emplace_back("--sysroot="+eosio::cdt::whereami::where()+"/../");
-      ldopts.emplace_back("-L"+eosio::cdt::whereami::where()+"/../lib");
-#ifndef __APPLE__
-      ldopts.emplace_back("-L"+eosio::cdt::whereami::where()+"/../lib64");
-#endif
-   }
-
    if (!isystem_opt.empty()) {
       copts.emplace_back("-isystem="+isystem_opt);
    }
@@ -513,6 +648,7 @@ static Options CreateOptions(bool add_defaults=true) {
       copts.emplace_back("-D"+define);
    }
    if (emit_ast_opt) {
+      link = false;
       copts.emplace_back("-emit-ast");
    }
    if (emit_llvm_opt) {
@@ -522,13 +658,18 @@ static Options CreateOptions(bool add_defaults=true) {
       link = false;
       copts.emplace_back("-E");
    }
-   if(g_opt)
+   if(g_opt) {
       copts.emplace_back("-g");
+   }
+   if (!x_opt.empty()) {
+      // x_opt should precede input files
+      copts.insert(copts.begin(), "-x"+x_opt);
+   }
    if (color_diag_opt) {
       copts.emplace_back("-fcolor-diagnostics");
    }
    if (!MF_opt.empty()) {
-      copts.emplace_back("-MF "+MF_opt);
+      copts.insert(copts.end(), { "-MF", MF_opt });
    }
    if (MD_opt) {
       copts.emplace_back("-MD");
@@ -571,6 +712,52 @@ static Options CreateOptions(bool add_defaults=true) {
       copts.emplace_back("-I"+inc_dir);
       agopts.emplace_back("-I"+inc_dir);
    }
+   if (!sysroot_opt.empty()) {
+      copts.emplace_back("--sysroot="+sysroot_opt);
+      copts.emplace_back("-I"+sysroot_opt+"/include/libcxx");
+      copts.emplace_back("-I"+sysroot_opt+"/include/libc");
+
+      // only allow capi for native builds and for eosio-cc
+      if (fnative_opt) {
+        copts.emplace_back("-I"+sysroot_opt+"/include/eosiolib/capi");
+        copts.emplace_back("-I"+sysroot_opt+"/include/eosiolib/native");
+      }
+#ifndef CPP_COMP
+      copts.emplace_back("-I"+sysroot_opt+"/include/eosiolib/capi");
+#endif
+      copts.emplace_back("-I"+sysroot_opt+"/include/eosiolib/core");
+      copts.emplace_back("-I"+sysroot_opt+"/include/eosiolib/contracts");
+
+      ldopts.emplace_back("-L"+sysroot_opt+"/lib");
+#ifndef __APPLE__
+      ldopts.emplace_back("-L"+sysroot_opt+"/lib64");
+#endif
+   }
+   else {
+      copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/libcxx");
+      copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/libc");
+      copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include");
+      copts.emplace_back("--sysroot="+eosio::cdt::whereami::where()+"/../");
+      agopts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/libcxx");
+      agopts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/libc");
+      agopts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include");
+      agopts.emplace_back("--sysroot="+eosio::cdt::whereami::where()+"/../");
+      ldopts.emplace_back("-L"+eosio::cdt::whereami::where()+"/../lib");
+
+      if (fnative_opt) {
+        copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/eosiolib/capi");
+        copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/eosiolib/native");
+      }
+#ifndef CPP_COMP
+      copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/eosiolib/capi");
+#endif
+      copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/eosiolib/core");
+      copts.emplace_back("-I"+eosio::cdt::whereami::where()+"/../include/eosiolib/contracts");
+
+#ifndef __APPLE__
+      ldopts.emplace_back("-L"+eosio::cdt::whereami::where()+"/../lib64");
+#endif
+   }
    if (O_opt.empty() && !g_opt) {
       copts.emplace_back("-O3");
    }
@@ -579,6 +766,11 @@ static Options CreateOptions(bool add_defaults=true) {
    }
    if (S_opt) {
       copts.emplace_back("-S");
+      link = false;
+   }
+   if (llvm_ir_opt) {
+      copts.emplace_back("-S");
+      copts.emplace_back("-emit-llvm");
       link = false;
    }
    if (v_opt) {
@@ -608,10 +800,12 @@ static Options CreateOptions(bool add_defaults=true) {
       else {
          ldopts.emplace_back("--lto-O3");
       }
+      ldopts.emplace_back("-zstack-size=" + std::to_string(stack_size_opt));
 #else
       if (fno_stack_first_opt) {
          ldopts.emplace_back("-fno-stack-first");
       }
+      ldopts.emplace_back("-stack-size=" + std::to_string(stack_size_opt));
       if (fno_lto_opt) {
          ldopts.emplace_back("-fno-lto-opt");
       }
@@ -628,25 +822,37 @@ static Options CreateOptions(bool add_defaults=true) {
       ldopts.emplace_back("-l"+library);
    }
    if (o_opt.empty()) {
-      copts.emplace_back("-o a.out");
 #ifndef ONLY_LD
-      ldopts.emplace_back("a.out");
+      if (inputs.size() == 1) {
+         llvm::SmallString<256> fn  = llvm::sys::path::filename(inputs[0]);
+         llvm::sys::path::replace_extension(fn, fnative_opt ? "" : ".wasm");
+         output_fn = fn.str();
+      } else {
+         ldopts.emplace_back("a.out");
+      }
+#else
+      if (inputs.size() == 1) {
+         llvm::SmallString<256> fn = llvm::sys::path::filename(inputs[0]);
+         llvm::sys::path::replace_extension(fn, "");
+         llvm::sys::path::replace_extension(fn, fnative_opt ? "" : ".wasm");
+         output_fn = fn.str();
+         ldopts.emplace_back("-o"+output_fn);
+      } else {
+         output_fn = "a.out";
+         ldopts.emplace_back("-o"+output_fn);
+      }
 #endif
-      ldopts.emplace_back("-o a.out");
-      output_fn = "a.out";
+      has_o_opt = false;
    }
    else {
-      copts.emplace_back("-o "+o_opt);
-#ifndef ONLY_LD
-      if (!inputs.empty())
-      ldopts.push_back(o_opt);
-#endif
-      ldopts.emplace_back("-o "+o_opt);
+      ldopts.emplace_back("-o");
+      ldopts.emplace_back(o_opt);
       output_fn = o_opt;
+      has_o_opt = true;
    }
-   
-   if (!fnative_opt) { 
-#ifndef ONLY_LD 
+
+   if (!fnative_opt) {
+#ifndef ONLY_LD
       if (!eosio_imports_opt.empty()) {
          ldopts.emplace_back("-eosio-imports="+eosio_imports_opt);
       }
@@ -663,19 +869,18 @@ static Options CreateOptions(bool add_defaults=true) {
 #ifndef ONLY_LD
 #ifdef CPP_COMP
    if (! std_opt.empty()) {
-      copts.emplace_back("--std="+std_opt);
-      agopts.emplace_back("--std="+std_opt);
+      copts.emplace_back("-std="+std_opt);
+      agopts.emplace_back("-std="+std_opt);
    } else {
-      copts.emplace_back("--std=c++17");
-      agopts.emplace_back("--std=c++17");
-
+      copts.emplace_back("-std=gnu++2a");
+      agopts.emplace_back("-std=gnu++2a");
    }
 
-   if (faligned_allocation_opt) { 
+   if (faligned_allocation_opt) {
       copts.emplace_back("-faligned-allocation");
       agopts.emplace_back("-faligned-allocation");
    }
-   if (fcoroutine_ts_opt) { 
+   if (fcoroutine_ts_opt) {
       copts.emplace_back("-fcoroutine-ts");
       agopts.emplace_back("-fcoroutine-ts");
    }
@@ -688,23 +893,45 @@ static Options CreateOptions(bool add_defaults=true) {
       agopts.emplace_back("-fstrict-vtable-pointers");
    }
 #endif
-   if (!contract_name.empty())
+   if (!contract_name.empty()) {
       abigen_contract = contract_name;
-   else
-      abigen_contract = output_fn.substr(0, output_fn.rfind(".wasm"));
+      has_contract_opt = true;
+   } else {
+      llvm::SmallString<256> fn = llvm::sys::path::filename(output_fn);
+      llvm::sys::path::replace_extension(fn, "");
+      abigen_contract = fn.str();
+      has_contract_opt = false;
+   }
 
    for ( auto resource : resources ) {
-      agresources.emplace_back(std::string("-R")+resource);
+      agresources.emplace_back(resource);
    }
    if (fnative_opt)
       ldopts.emplace_back("-fnative");
    if (fuse_main_opt)
       ldopts.emplace_back("-fuse-main");
-#else
-   if (fnative_opt)
-      ldopts.emplace_back("-lnative_c++ -lnative_c -lnative_eosio -lnative");
-   else
-      ldopts.emplace_back("-lc++ -lc -leosio");
+   
+   if(warn_action_read_only_opt) {
+      warn_action_read_only = true;
+   } else {
+      warn_action_read_only = false;
+   }
+
 #endif
-   return {output_fn, abigen_inputs.str(), inputs, link, abigen, pp_dir, abigen_output, abigen_contract, copts, ldopts, agopts, agresources, fnative_opt};
+
+   /* TODO add some way of defaulting these to the current highest version */
+   int abi_version_major = 1;
+   int abi_version_minor = 2;
+
+   if (!abi_version_opt.empty()) {
+      abi_version_major = std::stoi(abi_version_opt);
+      float tmp         = std::stof(abi_version_opt);
+      abi_version_minor = ((tmp - (int)tmp)*10);
+   }
+
+#ifndef ONLY_LD
+   return {output_fn, inputs, link, abigen, no_missing_ricardian_clause_opt, pp_only, pp_dir, abigen_output, abigen_contract, copts, ldopts, agopts, agresources, debug, fnative_opt, {abi_version_major, abi_version_minor}, has_o_opt, has_contract_opt, warn_action_read_only};
+#else
+   return {output_fn, {}, link, abigen, no_missing_ricardian_clause_opt, pp_only, pp_dir, abigen_output, abigen_contract, copts, ldopts, agopts, agresources, debug, fnative_opt, {abi_version_major, abi_version_minor}, has_o_opt, has_contract_opt, warn_action_read_only};
+#endif
 }

@@ -1,20 +1,18 @@
 #! /bin/bash
 
-VERS=`sw_vers -productVersion | awk '/10\.13\..*/{print $0}'`
-if [[ -z "$VERS" ]];
-then
-   VERS=`sw_vers -productVersion | awk '/10\.14.*/{print $0}'`
-   if [[ -z "$VERS" ]];
-   then
+VERS=`sw_vers -productVersion | awk '/10\.14\..*/{print $0}'`
+if [[ -z "$VERS" ]]; then
+   VERS=`sw_vers -productVersion | awk '/10\.15.*/{print $0}'`
+   if [[ -z $VERS ]]; then
       echo "Error, unsupported OS X version"
       exit -1
    fi
-   MAC_VERSION="mojave"
+   MAC_VERSION="catalina"
 else
-   MAC_VERSION="high_sierra"
+   MAC_VERSION="mojave"
 fi
 
-NAME="${PROJECT}-${VERSION}.${MAC_VERSION}.bottle.tar.gz"
+NAME="${PROJECT}-${VERSION}.${MAC_VERSION}.bottle"
 
 mkdir -p ${PROJECT}/${VERSION}/opt/eosio_cdt/lib/cmake
 
@@ -28,11 +26,13 @@ export SPREFIX
 export SUBPREFIX
 export SSUBPREFIX
 
-bash generate_tarball.sh ${NAME}
+. ./generate_tarball.sh ${NAME}
 
-hash=`openssl dgst -sha256 ${NAME} | awk 'NF>1{print $NF}'`
+hash=`openssl dgst -sha256 ${NAME}.tar.gz | awk 'NF>1{print $NF}'`
 
 echo "class EosioCdt < Formula
+   # typed: false
+   # frozen_string_literal: true
 
    homepage \"${URL}\"
    revision 0
@@ -50,13 +50,13 @@ echo "class EosioCdt < Formula
    depends_on \"doxygen\" => :build
    depends_on \"graphviz\" => :build
    depends_on \"lcov\" => :build
-   depends_on :xcode => :build
-   depends_on :macos => :high_sierra
-   depends_on :arch =>  :intel
+   depends_on xcode: :build
+   depends_on macos: :mojave
+   depends_on arch: :intel
   
    bottle do
       root_url \"https://github.com/eosio/eosio.cdt/releases/download/v${VERSION}\"
-      sha256 \"${hash}\" => :${MAC_VERSION}
+      sha256 ${MAC_VERSION}: \"${hash}\"
    end
    def install
       raise \"Error, only supporting binary packages at this time\"
@@ -64,4 +64,4 @@ echo "class EosioCdt < Formula
 end
 __END__" &> eosio.cdt.rb
 
-rm -r ${PROJECT}
+rm -r ${PROJECT} || exit 1

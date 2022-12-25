@@ -51,10 +51,9 @@ struct project {
                            "ACTION @::hi( name nm ) {\n"
                            "   /* fill in action body */\n"
                            "   print_f(\"Name : %\\n\",nm);\n"
-                           "}\n\n"
-                           "EOSIO_DISPATCH( @, (hi) )";
+                           "}";
 
-   const std::string hpp = "#include <eosiolib/eosio.hpp>\n"
+   const std::string hpp = "#include <eosio/eosio.hpp>\n"
                            "using namespace eosio;\n\n"
                            "CONTRACT @ : public contract {\n"
                            "   public:\n"
@@ -62,7 +61,7 @@ struct project {
                            "      ACTION hi( name nm );\n\n"
                            "      using hi_action = action_wrapper<\"hi\"_n, &@::hi>;\n"
                            "};";
-   
+
    const std::string ricardian = "<h1 class=\"contract\"> hi </h1>\n\n"
                                  "Stub for hi action's ricardian contract";
 
@@ -95,7 +94,7 @@ struct project {
                                     "   - cd to 'build' directory\n"
                                     "   - run the command 'cmake ..'\n"
                                     "   - run the command 'make'\n\n"
-                                    " - After build -\n" 
+                                    " - After build -\n"
                                     "   - The built smart contract is under the '@' directory in the 'build' directory\n"
                                     "   - You can then do a 'set contract' action with 'cleos' and point in to the './build/@' directory\n\n"
                                     " - Additions to CMake should be done to the CMakeLists.txt in the './src' directory and not in the top level CMakeLists.txt";
@@ -114,7 +113,7 @@ struct project {
       }
       return ss.str();
    }
-   
+
    std::string replace_cdt_root( const std::string& in ) {
       std::stringstream ss;
       for ( char c : in ) {
@@ -189,14 +188,14 @@ int main(int argc, const char **argv) {
         os << "eosio-init version " << "@VERSION_FULL@" << "\n";
   });
    cl::OptionCategory cat("eosio-init", "generates an eosio smart contract project");
-   
+
    cl::opt<bool> bare_opt(
       "bare",
-      cl::desc("produces only a skeleton smart contract without CMake support"), 
+      cl::desc("produces only a skeleton smart contract without CMake support"),
       cl::cat(cat));
    cl::opt<std::string> project_name(
       "project",
-      cl::desc("output project name"), 
+      cl::desc("output project name"),
       cl::Required,
       cl::cat(cat));
    cl::opt<std::string> output_dir(
@@ -206,6 +205,9 @@ int main(int argc, const char **argv) {
 
    cl::ParseCommandLineOptions(argc, argv, std::string("eosio-proj"));
    try {
+      if (!std::regex_match(project_name, std::regex("^[_a-zA-Z][_a-zA-Z0-9]*$"))) {
+         throw std::runtime_error("ERROR: invalid identifier: " + project_name + " (ensure that it is a valid C++ identifier)");
+      }
       llvm::SmallString<128> rp;
       std::string path = output_dir;
       if (path.empty())
@@ -229,6 +231,6 @@ int main(int argc, const char **argv) {
       std::cout << e.what() << "\n";
       return -1;
    }
-   
+
    return 0;
 }

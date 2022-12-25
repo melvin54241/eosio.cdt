@@ -1,5 +1,7 @@
 #! /bin/bash
 
+OS=$1
+
 PREFIX="usr"
 SPREFIX=${PREFIX}
 SUBPREFIX="opt/${PROJECT}/${VERSION}"
@@ -22,15 +24,18 @@ Architecture: amd64
 Homepage: ${URL} 
 Maintainer: ${EMAIL} 
 Description: ${DESC}" &> ${PROJECT}/DEBIAN/control
+cat ${PROJECT}/DEBIAN/control
 
 export PREFIX
 export SUBPREFIX
 export SPREFIX
 export SSUBPREFIX
 
-bash generate_tarball.sh ${NAME}.tar.gz
+. ./generate_tarball.sh ${NAME} ${OS}
+echo "Unpacking tarball: ${NAME}.tar.gz..."
+tar -xzvf ${NAME}.tar.gz -C ${PROJECT} || exit 1
+dpkg-deb --build ${PROJECT} || exit 1
+mv ${PROJECT}.deb ${NAME}.deb || exit 1
+rm -r ${PROJECT} || exit 1
 
-tar -xvzf ${NAME}.tar.gz -C ${PROJECT} 
-dpkg-deb --build ${PROJECT} 
-mv ${PROJECT}.deb ${NAME}.deb
-rm -r ${PROJECT}
+exit $BUILDSTATUS
